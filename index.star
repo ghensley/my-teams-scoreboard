@@ -6,6 +6,8 @@ load("encoding/json.star", "json")
 
 FOOTBALL_URL = "http://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 BASEBALL_URL = "http://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
+HOCKEY_URL = "http://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard"
+BASKETBALL_URL = "http://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
 
 DEFAULT_LOCATION = """
 {
@@ -86,12 +88,80 @@ MLB_TEAMS = {
     "Washington Nationals": "20",
 }
 
+NHL_TEAMS = {
+    "Anaheim Ducks": "25",
+    "Arizona Coyotes": "24",
+    "Boston Bruins": "1",
+    "Buffalo Sabres": "2",
+    "Calgary Flames": "3",
+    "Carolina Hurricanes": "7",
+    "Chicago Blackhawks": "4",
+    "Colorado Avalanche": "17",
+    "Columbus Blue Jackets": "29",
+    "Dallas Stars": "9",
+    "Detroit Red Wings": "5",
+    "Edmonton Oilers": "6",
+    "Florida Panthers": "26",
+    "Los Angeles Kings": "8",
+    "Minnesota Wild": "30",
+    "Montreal Canadiens": "10",
+    "Nashville Predators": "27",
+    "New Jersey Devils": "11",
+    "New York Islanders": "12",
+    "New York Rangers": "13",
+    "Ottawa Senators": "14",
+    "Philadelphia Flyers": "15",
+    "Pittsburgh Penguins": "16",
+    "San Jose Sharks": "18",
+    "Seattle Kraken": "124292",
+    "St. Louis Blues": "19",
+    "Tampa Bay Lightning": "20",
+    "Toronto Maple Leafs": "21",
+    "Vancouver Canucks": "22",
+    "Vegas Golden Knights": "37",
+    "Washington Capitals": "23",
+    "Winnipeg Jets": "28",
+}
+
+NBA_TEAMS = {
+    "Atlanta Hawks": "1",
+    "Boston Celtics": "2",
+    "Brooklyn Nets": "17",
+    "Charlotte Hornets": "30",
+    "Chicago Bulls": "4",
+    "Cleveland Cavaliers": "5",
+    "Dallas Mavericks": "6",
+    "Denver Nuggets": "7",
+    "Detroit Pistons": "8",
+    "Golden State Warriors": "9",
+    "Houston Rockets": "10",
+    "Indiana Pacers": "11",
+    "LA Clippers": "12",
+    "Los Angeles Lakers": "13",
+    "Memphis Grizzlies": "29",
+    "Miami Heat": "14",
+    "Milwaukee Bucks": "15",
+    "Minnesota Timberwolves": "16",
+    "New Orleans Pelicans": "3",
+    "New York Knicks": "18",
+    "Oklahoma City Thunder": "25",
+    "Orlando Magic": "19",
+    "Philadelphia 76ers": "20",
+    "Phoenix Suns": "21",
+    "Portland Trail Blazers": "22",
+    "Sacramento Kings": "23",
+    "San Antonio Spurs": "24",
+    "Toronto Raptors": "28",
+    "Utah Jazz": "26",
+    "Washington Wizards": "27",
+}
+
 def get_events_with_competitor(all_events, id):
     events_with_competitor = []
     for event in all_events:
         for competition in event["competitions"]:
             for competitor in competition["competitors"]:
-                if competitor["id"] == id:  #and not event["status"]["type"]["completed"]:
+                if competitor["id"] == id:
                     events_with_competitor.append(event)
     return events_with_competitor
 
@@ -132,7 +202,17 @@ def main(config):
         if (config.bool(team)):
             my_mlb_teams.append(team)
 
-    rep = http.get(FOOTBALL_URL, ttl_seconds = 60)
+    my_nhl_teams = []
+    for team in NHL_TEAMS.keys():
+        if (config.bool(team)):
+            my_nhl_teams.append(team)
+
+    my_nba_teams = []
+    for team in NBA_TEAMS.keys():
+        if (config.bool(team)):
+            my_nba_teams.append(team)
+
+    rep = http.get(FOOTBALL_URL, ttl_seconds = 120)
     if rep.status_code != 200:
         fail("Football request failed with status %d", rep.status_code)
 
@@ -144,7 +224,7 @@ def main(config):
         for team in my_nfl_teams:
             my_nfl_events = my_nfl_events + get_events_with_competitor(nfl_events, NFL_TEAMS[team])
 
-    rep = http.get(BASEBALL_URL, ttl_seconds = 60)
+    rep = http.get(BASEBALL_URL, ttl_seconds = 120)
     if rep.status_code != 200:
         fail("Baseball request failed with status %d", rep.status_code)
 
@@ -156,7 +236,31 @@ def main(config):
         for team in my_mlb_teams:
             my_mlb_events = my_mlb_events + get_events_with_competitor(mlb_events, MLB_TEAMS[team])
 
-    my_events = my_nfl_events + my_mlb_events
+    rep = http.get(HOCKEY_URL, ttl_seconds = 120)
+    if rep.status_code != 200:
+        fail("Hockey request failed with status %d", rep.status_code)
+
+    if not rep or not rep.json():
+        my_nhl_events = []
+    else:
+        nhl_events = rep.json()["events"]
+        my_nhl_events = []
+        for team in my_nhl_teams:
+            my_nhl_events = my_nhl_events + get_events_with_competitor(nhl_events, NHL_TEAMS[team])
+
+    rep = http.get(BASKETBALL_URL, ttl_seconds = 120)
+    if rep.status_code != 200:
+        fail("Basketball request failed with status %d", rep.status_code)
+
+    if not rep or not rep.json():
+        my_nba_events = []
+    else:
+        nba_events = rep.json()["events"]
+        my_nba_events = []
+        for team in my_nba_teams:
+            my_nba_events = my_nba_events + get_events_with_competitor(nba_events, NBA_TEAMS[team])
+
+    my_events = my_nfl_events + my_mlb_events + my_nba_events + my_nhl_events
 
     rows = []
     for event in my_events:
@@ -213,7 +317,7 @@ def main(config):
     if (len(rows) == 0):
         return render.Root(
             render.Box(
-                render.WrappedText("[No Games Today]"),
+                render.WrappedText("[No Games]"),
             ),
         )
 
@@ -252,6 +356,28 @@ def get_schema():
         for team in MLB_TEAMS.keys()
     ]
 
+    nba_options = [
+        schema.Toggle(
+            id = team,
+            name = team,
+            desc = "NBA - " + team,
+            icon = "basketball",
+            default = False,
+        )
+        for team in NBA_TEAMS.keys()
+    ]
+
+    nhl_options = [
+        schema.Toggle(
+            id = team,
+            name = team,
+            desc = "NHL - " + team,
+            icon = "hockey-puck",
+            default = False,
+        )
+        for team in NHL_TEAMS.keys()
+    ]
+
     return schema.Schema(
         version = "1",
         fields = [
@@ -261,5 +387,5 @@ def get_schema():
                 desc = "Location for diplaying local game times.",
                 icon = "locationDot",
             ),
-        ] + nfl_options + mlb_options,
+        ] + nfl_options + mlb_options + nba_options + nhl_options,
     )
